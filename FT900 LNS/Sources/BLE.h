@@ -16,7 +16,7 @@ typedef struct _BLEData {
 } BLEData;
 
 
-static double dP0, dN;
+double dP0, dN;
 
 
 void SetBLEData();
