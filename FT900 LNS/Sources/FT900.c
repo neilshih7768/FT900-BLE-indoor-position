@@ -3,13 +3,23 @@
 #include "BLE.h"
 
 
+/* The Timer Prescaler will divide the 100MHz Master clock down to 2kHz */
+#define TIMER_PRESCALER (50000)
+#define TIMER_ONE_MILLISECOND (100000/TIMER_PRESCALER)
+#define TIMER_ONE_SECOND (1000*TIMER_ONE_MILLISECOND)
+#define PERIOD 10
+#define RECESIZE 10				// Recently size for average
+
+
 uint8_t sRxData[100];
 int iRxIndex = 0;
 uint8_t sName[30];
 int iRSSI;
-double dTimer = 0;
 
-int iRxCounterArray[10];
+int iRxCounterArray[PERIOD];	// For frequency
+double dTimer = 0;				// For frequency
+int iRecently[RECESIZE];		// Record recently data for average
+int iRIndex = 0;				// Record recently data index
 
 
 char GetCharToRxData()
@@ -27,6 +37,7 @@ char GetCharToRxData()
 void CheckRxData()
 {
 	/* Filter wrong data */
+	double dDistance = 0.0f;
 	char *pCheckName = strstr (sRxData, "{NAME:");	// Find "{NAME:" in RX data
 	char *pChecRSSI  = strstr (sRxData, "RSSI:");	// Find "RSSI:" in RX data
 
@@ -60,15 +71,34 @@ void CheckRxData()
 		iRSSI = iRSSI * 10 - (pChecRSSI[8]-'0');					// if RSSI > 100
 	}
 
-	iRxCounterArray[(int)dTimer % 10]++;
+
+	// For frequency
+	iRxCounterArray[(int)dTimer]++;
 
 	float iTotalCount = 0;
-	for(int i = 0; i < 10; i++)
+	for(int i = 0; i < PERIOD; i++)
 		iTotalCount += iRxCounterArray[i];
 
-	sprintf(sPrintData, "RSSI = %d, Distance = %5.1fcm  %.2f Hz\r\n", iRSSI, ConvertRSSI2toDist((double)iRSSI), iTotalCount/10.0);
+	dDistance = ConvertRSSI2toDist((double)iRSSI);
+
+
+	// For average
+	iRecently[iRIndex] = dDistance;
+	iRIndex++;
+	if(RECESIZE == iRIndex)
+		iRIndex = 0;
+
+	float iTotalRecently = 0;
+	for(int i = 0; i < RECESIZE; i++)
+		iTotalRecently += iRecently[i];
+
+
+	sprintf(sPrintData, "RSSI = %d, Distance = %5.1fcm  %5.1f Hz, Average = %5.1fcm\r\n"
+			, iRSSI, dDistance, iTotalCount/PERIOD, iTotalRecently/RECESIZE);
 
 	uart_puts(UART0, sPrintData);
+
+
 }
 
 
@@ -163,14 +193,15 @@ void Setup()
 void Loop()
 {
 
-	if (timer_is_interrupted(timer_select_a) == 1)
+	if (timer_is_interrupted(timer_select_a) == 1)	// Per second do once
 	{
-		char sPrintData[20];
 		dTimer++;
-		//sprintf(sPrintData, "Time : %.0f\r\n", dTimer);
-		//uart_puts(UART0, sPrintData);
+		if(PERIOD == dTimer)
+			dTimer = 0;
 
-		iRxCounterArray[(int)dTimer % 10] = 0;
+		iRxCounterArray[(int)dTimer] = 0;			// Reset counter
+
+
 	}
 
 }
